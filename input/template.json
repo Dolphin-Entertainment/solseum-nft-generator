@@ -1,17 +1,16 @@
 {
-    "name": "Cute Squares",
-    "symbol": "CS",
-    "description": "Cutest squares on Solana Network!!",
-    "seller_fee_basis_points": 500,
+    "name": "Jolly Dolphins",
+    "symbol": "JD",
+    "description": "[THIS IS A TEST] ]The jolliest of dolphins",
+    "seller_fee_basis_points": 1000,
     "image": "image.png",
-    "external_url": "YOUR WEBPAGE",
+    "external_url": "https://dolphinentertainment.com",
     "attributes": 
-    [
-    ],
+    [],
     "collection":
     {
-        "name": "Solana Cute Squares",
-        "family": "Solseum NFT Generator"
+        "name": "Jolly Dolphins",
+        "family": "Dolphins"
     },
     "properties":
     {
@@ -26,7 +25,7 @@
         "creators":
         [
             {
-                "address": "2QvVjytnfYyFJUnVC9xGu3ejjVTNDzTUjfvodrn6NVcn",
+                "address": "AfabEY9MxXDWJQM4vAn8CLdCLEMzVK8o89CiMq5gGDkU",
                 "share": 100
             }
         ]

@@ -54,8 +54,9 @@ programCommand('transfer')
     const connection = new Connection(rpcUrl);
 
     // Get all tokens from the wallet
+    console.log(`Getting all tokens for wallet: ${payer.publicKey}`);
     const resp = await connection.getTokenAccountsByOwner(payer.publicKey, {programId: TOKEN_PROGRAM_ID});
-    const tokenAccounts = await Promise.all(resp.value.map(async ({account, pubkey}) => {
+    const tokenAccounts = await Promise.all(resp.value.map(async ({account, pubkey}, index) => {
       const decoded = AccountLayout.decode(account.data);
       const tokenAccount = {
         address: pubkey,
@@ -69,6 +70,7 @@ programCommand('transfer')
         closeAuthority: new PublicKey(decoded.closeAuthority)
       };
       // Look up Metadata account with memcmp filter based on the token mint
+      console.log(`Looking up program accounts for index: ${index}`);
       const res = await connection.getProgramAccounts(METADATA_PROGRAM_ID, {
         filters: [
           {
