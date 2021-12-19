@@ -23,5 +23,10 @@ update_candy_machine \
 1. Generate the images using the code in this repository (see README.md for more information)
     1. Set up all the asset files
     2. Generate X images and attribute files `python3 main.py -p X`
+2. Upload the assets to arweave
+    1. Rename the old cache file
+    2. Run to upload and update with new cache `ts-node ~/metaplex-foundation/metaplex/js/packages/cli/src/candy-machine-cli.ts upload ./output/nfts/public_mint_assets --env devnet -k ~/.config/solana/id.json`
+    3. Rename the new cache file
+    4. Change the name of the old cache file back
 2. Update the existing NFTs `ts-node ~/metaplex-foundation/metaplex/js/packages/cli/src/candy-machine-cli.ts update_existing_nfts_from_latest_cache_file --env devnet -k ~/.config/solana/id.json`
 
