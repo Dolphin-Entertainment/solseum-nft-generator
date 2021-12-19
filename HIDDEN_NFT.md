@@ -17,5 +17,11 @@ update_candy_machine \
 --date "13 Dec 2021 17:00:00 GMT"
 ````
 8. Mint tokens to wallet address (for transfer to centralized exchange like FTX market place) `ts-node ~/metaplex-foundation/metaplex/js/packages/cli/src/candy-machine-cli.ts mint_multiple_tokens -k ~/.config/solana/id.json --number Y`
-9. Transfer all NFTs with symbol to another address `ts-node scripts/transfer.ts transfer --symbol CC --env devnet --keypair ~/.config/solana/id.json 6zQVq2wM1fMuMTBuizGFChQjujorpdTEot5CVCTjRjGG`
+9. (Required for FTX collection) Get a list of the all mint addresses `ts-node ~/metaplex-foundation/metaplex/js/packages/cli/src/candy-machine-cli.ts get_all_mint_addresses --env devnet -k ~/.config/solana/id.json`
+10. Transfer all NFTs with symbol to another address `ts-node scripts/transfer.ts transfer --symbol CC --env devnet --keypair ~/.config/solana/id.json 6zQVq2wM1fMuMTBuizGFChQjujorpdTEot5CVCTjRjGG`
+### REVEAL STEPS
+1. Generate the images using the code in this repository (see README.md for more information)
+    1. Set up all the asset files
+    2. Generate X images and attribute files `python3 main.py -p X`
+2. Update the existing NFTs `ts-node ~/metaplex-foundation/metaplex/js/packages/cli/src/candy-machine-cli.ts update_existing_nfts_from_latest_cache_file --env devnet -k ~/.config/solana/id.json`
 
