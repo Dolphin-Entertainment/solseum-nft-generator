@@ -45,8 +45,12 @@ programCommand("transfer")
     (val) => new PublicKey(val)
   )
   .option("-s, --symbol <string>", "Symbol to filter NFTs for transfer", "CC")
+  .option(
+    '-r, --rpc-url <string>',
+    'custom rpc url since this is a heavy command',
+  )
   .action(async (toKey, options, cmd) => {
-    const { keypair, env, symbol } = cmd.opts();
+    const { keypair, env, symbol, rpcUrl: rpcUrlArg } = cmd.opts();
 
     // Load wallet keypair
     const payer = Keypair.fromSecretKey(
@@ -60,7 +64,7 @@ programCommand("transfer")
     );
 
     // Create connection to RPC cluster
-    const rpcUrl = clusterApiUrl(env);
+    const rpcUrl = rpcUrlArg || clusterApiUrl(env);
     const connection = new Connection(rpcUrl);
 
     // Get all tokens from the wallet
@@ -71,7 +75,7 @@ programCommand("transfer")
     const tokenAccounts = await Promise.all(
       resp.value.map(async ({ account, pubkey }, index) => {
         // Avoid RPC rate limites
-        await wait(index * 1_500);
+        await wait(index * 2_500);
 
         const decoded = AccountLayout.decode(account.data);
         const tokenAccount = {
@@ -129,7 +133,7 @@ programCommand("transfer")
     await nftAccounts.reduce(async (accumulator, nftAccount) => {
       await accumulator;
       // Avoid RPC node limits
-      await wait(1000);
+      await wait(1_000);
       const tokenAccount = nftAccount.tokenAccount;
       const transaction = new Transaction();
       // Create the Associated Token Account for the toKey
