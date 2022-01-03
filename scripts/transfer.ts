@@ -175,6 +175,8 @@ programCommand("transfer")
       await sendAndConfirmTransaction(connection, transaction, [payer], {
         commitment: "confirmed",
       });
+      
+      return null;
     }, starterPromise);
   });
 
