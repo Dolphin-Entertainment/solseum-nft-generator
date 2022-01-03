@@ -70,6 +70,9 @@ programCommand("transfer")
     });
     const tokenAccounts = await Promise.all(
       resp.value.map(async ({ account, pubkey }, index) => {
+        // Avoid RPC rate limites
+        await wait(index * 1_500);
+
         const decoded = AccountLayout.decode(account.data);
         const tokenAccount = {
           address: pubkey,
