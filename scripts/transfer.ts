@@ -131,57 +131,61 @@ programCommand("transfer")
 
     const starterPromise = Promise.resolve(null);
     await nftAccounts.reduce(async (accumulator, nftAccount) => {
-      await accumulator;
-      // Avoid RPC node limits
-      await wait(1_000);
-      const tokenAccount = nftAccount.tokenAccount;
-      const transaction = new Transaction();
-      // Create the Associated Token Account for the toKey
-      const associatedAddress = await Token.getAssociatedTokenAddress(
-        ASSOCIATED_TOKEN_PROGRAM_ID,
-        TOKEN_PROGRAM_ID,
-        tokenAccount.mint,
-        toKey
-      );
-      transaction.add(
-        Token.createAssociatedTokenAccountInstruction(
+      try {
+        // Avoid RPC node limits by running sequentially
+        await accumulator;
+
+        const tokenAccount = nftAccount.tokenAccount;
+        const transaction = new Transaction();
+        // Create the Associated Token Account for the toKey
+        const associatedAddress = await Token.getAssociatedTokenAddress(
           ASSOCIATED_TOKEN_PROGRAM_ID,
           TOKEN_PROGRAM_ID,
           tokenAccount.mint,
-          associatedAddress,
-          toKey,
-          payer.publicKey
-        )
-      );
-      // Transfer the NFT to the new account
-      transaction.add(
-        Token.createTransferCheckedInstruction(
-          TOKEN_PROGRAM_ID,
-          tokenAccount.address,
-          tokenAccount.mint,
-          associatedAddress,
-          payer.publicKey,
-          [],
-          1,
-          0
-        )
-      );
+          toKey
+        );
+        transaction.add(
+          Token.createAssociatedTokenAccountInstruction(
+            ASSOCIATED_TOKEN_PROGRAM_ID,
+            TOKEN_PROGRAM_ID,
+            tokenAccount.mint,
+            associatedAddress,
+            toKey,
+            payer.publicKey
+          )
+        );
+        // Transfer the NFT to the new account
+        transaction.add(
+          Token.createTransferCheckedInstruction(
+            TOKEN_PROGRAM_ID,
+            tokenAccount.address,
+            tokenAccount.mint,
+            associatedAddress,
+            payer.publicKey,
+            [],
+            1,
+            0
+          )
+        );
 
-      // Close out the old account to get the rent back
-      transaction.add(
-        Token.createCloseAccountInstruction(
-          TOKEN_PROGRAM_ID,
-          tokenAccount.address,
-          payer.publicKey,
-          payer.publicKey,
-          []
-        )
-      );
-
-      // Send the transaction
-      await sendAndConfirmTransaction(connection, transaction, [payer], {
-        commitment: "confirmed",
-      });
+        // Close out the old account to get the rent back
+        transaction.add(
+          Token.createCloseAccountInstruction(
+            TOKEN_PROGRAM_ID,
+            tokenAccount.address,
+            payer.publicKey,
+            payer.publicKey,
+            []
+          )
+        );
+        console.log(`${new Date().getTime()} - Transfering item`);
+        // Send the transaction
+        await sendAndConfirmTransaction(connection, transaction, [payer], {
+          commitment: "confirmed",
+        });
+      } catch(error) {
+        console.log("Error sending item: ", error)
+      }
       
       return null;
     }, starterPromise);
