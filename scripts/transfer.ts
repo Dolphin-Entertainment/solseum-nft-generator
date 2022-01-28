@@ -6,6 +6,8 @@ import {
   PublicKey,
   Transaction,
   sendAndConfirmTransaction,
+  RpcResponseAndContext,
+  AccountInfo,
 } from "@solana/web3.js";
 import {
   AccountLayout,
@@ -28,6 +30,80 @@ const METADATA_PROGRAM_ID = new PublicKey(
 
 const wait = (delayMS: number) =>
   new Promise((resolve) => setTimeout(resolve, delayMS));
+
+const filterTokenAccounts = async (
+  connection: Connection,
+  tokenAccountsResponse: RpcResponseAndContext<{
+    pubkey: PublicKey;
+    account: AccountInfo<Buffer>;
+  }[]>,
+  opts: { nftsOnly: boolean, symbol?: string } = { nftsOnly: false }
+) => {
+  const {nftsOnly, symbol} = opts;
+  const accounts = await Promise.all(
+    tokenAccountsResponse.value.map(async ({ account, pubkey }, index) => {
+      const decoded = AccountLayout.decode(account.data);
+      const tokenAccount = {
+        address: pubkey,
+        mint: new PublicKey(decoded.mint),
+        owner: new PublicKey(decoded.owner),
+        amount: new u64(decoded.amount),
+        delegate: new PublicKey(decoded.delegate),
+        isInitialized: decoded.state === 1,
+        isNative: decoded.isNativeOption === 1,
+        delegatedAmount: new u64(decoded.delegatedAmount),
+        closeAuthority: new PublicKey(decoded.closeAuthority),
+      };
+      let metaData = undefined;
+      if (nftsOnly) {
+        // Avoid RPC rate limites
+        await wait(index * 2_500);
+        // Look up Metadata account with memcmp filter based on the token mint
+        console.log(
+          `Looking up metadat program accounts for index: ${index}`
+        );
+        const res = await connection.getProgramAccounts(METADATA_PROGRAM_ID, {
+          filters: [
+            {
+              memcmp: {
+                offset:
+                  1 + // key
+                  32, // update auth
+                // 32 + // mint
+                bytes: tokenAccount.mint.toBase58(),
+              },
+            },
+          ],
+        });
+        // If there is a Metadata account, load and deserialize the data
+        const metadataAccount = res[0];
+        if (metadataAccount) {
+          metaData = await programs.metadata.Metadata.load(
+            connection,
+            metadataAccount.pubkey
+          );
+        }
+      }
+      return { tokenAccount, metaData };
+    })
+  );
+
+  let filteredAccounts = accounts;
+  if (nftsOnly) {
+    console.log("Filtering token accounts for metadata (i.e. only NFTs)");
+    filteredAccounts = filteredAccounts.filter(
+      (x) => x.metaData && x.metaData.data
+    );
+    if (symbol) {
+      console.log(`Filtering accounts by metadta symbol: ${symbol}`);
+      // Filter all owned NFTs by symbol
+      filteredAccounts = filteredAccounts.filter(
+        (x) => x.metaData && x.metaData.data.data.symbol === symbol
+      );
+    }
+  }
+  return filteredAccounts;
+};
 
 function programCommand(name: string) {
   return program
@@ -74,74 +150,13 @@ programCommand("list")
     const resp = await connection.getTokenAccountsByOwner(payer.publicKey, {
       programId: TOKEN_PROGRAM_ID,
     });
-    const tokenAccounts = await Promise.all(
-      resp.value.map(async ({ account, pubkey }, index) => {
-        const decoded = AccountLayout.decode(account.data);
-        const tokenAccount = {
-          address: pubkey,
-          mint: new PublicKey(decoded.mint),
-          owner: new PublicKey(decoded.owner),
-          amount: new u64(decoded.amount),
-          delegate: new PublicKey(decoded.delegate),
-          isInitialized: decoded.state === 1,
-          isNative: decoded.isNativeOption === 1,
-          delegatedAmount: new u64(decoded.delegatedAmount),
-          closeAuthority: new PublicKey(decoded.closeAuthority),
-        };
-        let metaData = undefined;
-        if (nftsOnly) {
-          // Avoid RPC rate limites
-          await wait(index * 2_500);
-          // Look up Metadata account with memcmp filter based on the token mint
-          console.log(`Looking up metadat program accounts for index: ${index}`);
-          const res = await connection.getProgramAccounts(METADATA_PROGRAM_ID, {
-            filters: [
-              {
-                memcmp: {
-                  offset:
-                    1 + // key
-                    32, // update auth
-                  // 32 + // mint
-                  bytes: tokenAccount.mint.toBase58(),
-                },
-              },
-            ],
-          });
-          // If there is a Metadata account, load and deserialize the data
-          const metadataAccount = res[0];
-          if (metadataAccount) {
-            metaData = await programs.metadata.Metadata.load(
-              connection,
-              metadataAccount.pubkey
-            );
-          }
-        }
-        return { tokenAccount, metaData };
-      })
-    );
 
-    if (nftsOnly) {
-      console.log("Filtering token accounts for metadata (i.e. only NFTs)");
-      let nftAccounts = tokenAccounts.filter(
-        (x) => x.metaData && x.metaData.data
-      );
-      if (symbol) {
-        console.log(`Filtering accounts by metadta symbol: ${symbol}`);
-        // Filter all owned NFTs by symbol
-        nftAccounts = tokenAccounts.filter(
-          (x) => x.metaData && x.metaData.data.data.symbol === symbol
-        );
-      }
-      console.log("NFT mint addresses\n");
-      nftAccounts.forEach((account) =>
-        console.log(account.tokenAccount.mint.toString())
-      );
-    } else {
-      console.log("All token mint addresses\n");
-      tokenAccounts.forEach((account) => {
-        console.log(account.tokenAccount.mint.toString())
-      })
-    }
+    const tokenAccounts = await filterTokenAccounts(connection, resp, {nftsOnly, symbol});
+
+    console.log("Printing token mint addresses\n");
+    tokenAccounts.forEach((account) => {
+      console.log(account.tokenAccount.mint.toString());
+    });
   });
 
 programCommand("transfer")
@@ -150,13 +165,14 @@ programCommand("transfer")
     "The public key to transfer the NFTs to",
     (val) => new PublicKey(val)
   )
+  .option("--nfts-only <nftsOnly>", "Flag to list only NFTs")
   .option("-s, --symbol <string>", "Symbol to filter NFTs for transfer", "CC")
   .option(
     "-r, --rpc-url <string>",
     "custom rpc url since this is a heavy command"
   )
   .action(async (toKey, options, cmd) => {
-    const { keypair, env, symbol, rpcUrl: rpcUrlArg } = cmd.opts();
+    const { keypair, env, symbol, rpcUrl: rpcUrlArg, nftsOnly } = cmd.opts();
 
     // Load wallet keypair
     const payer = Keypair.fromSecretKey(
@@ -178,72 +194,17 @@ programCommand("transfer")
     const resp = await connection.getTokenAccountsByOwner(payer.publicKey, {
       programId: TOKEN_PROGRAM_ID,
     });
-    const tokenAccounts = await Promise.all(
-      resp.value.map(async ({ account, pubkey }, index) => {
-        // Avoid RPC rate limites
-        await wait(index * 2_500);
-
-        const decoded = AccountLayout.decode(account.data);
-        const tokenAccount = {
-          address: pubkey,
-          mint: new PublicKey(decoded.mint),
-          owner: new PublicKey(decoded.owner),
-          amount: new u64(decoded.amount),
-          delegate: new PublicKey(decoded.delegate),
-          isInitialized: decoded.state === 1,
-          isNative: decoded.isNativeOption === 1,
-          delegatedAmount: new u64(decoded.delegatedAmount),
-          closeAuthority: new PublicKey(decoded.closeAuthority),
-        };
-        // Look up Metadata account with memcmp filter based on the token mint
-        console.log(`Looking up program accounts for index: ${index}`);
-        const res = await connection.getProgramAccounts(METADATA_PROGRAM_ID, {
-          filters: [
-            {
-              memcmp: {
-                offset:
-                  1 + // key
-                  32, // update auth
-                // 32 + // mint
-                bytes: tokenAccount.mint.toBase58(),
-              },
-            },
-          ],
-        });
-        // If there is a Metadata account, load and deserialize the data
-        const metadataAccount = res[0];
-        let metaData = undefined;
-        if (metadataAccount) {
-          metaData = await programs.metadata.Metadata.load(
-            connection,
-            metadataAccount.pubkey
-          );
-        }
-        return { tokenAccount, metaData };
-      })
-    );
-
-    console.log("Filtering token accounts for metadata (i.e. only NFTs)");
-    let nftAccounts = tokenAccounts.filter(
-      (x) => x.metaData && x.metaData.data
-    );
-    if (symbol) {
-      console.log(`Filtering accounts by metadta symbol: ${symbol}`);
-      // Filter all owned NFTs by symbol
-      nftAccounts = tokenAccounts.filter(
-        (x) => x.metaData && x.metaData.data.data.symbol === symbol
-      );
-    }
+    const tokenAccounts = await filterTokenAccounts(connection, resp, {nftsOnly, symbol});
 
     // Initiate the transfer for each NFT
     console.log(
       `Starting transfer of ${
-        nftAccounts.length
+        tokenAccounts.length
       } NFTs with symbol ${symbol} to ${toKey.toString()}`
     );
 
     const starterPromise = Promise.resolve(null);
-    await nftAccounts.reduce(async (accumulator, nftAccount) => {
+    await tokenAccounts.reduce(async (accumulator, nftAccount) => {
       try {
         // Avoid RPC node limits by running sequentially
         await accumulator;
