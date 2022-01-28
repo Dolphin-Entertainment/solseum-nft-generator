@@ -44,14 +44,15 @@ function programCommand(name: string) {
     );
 }
 programCommand("list")
-  .description("List NFTs in a wallet")
-  .option("-s, --symbol <string>", "Symbol to filter NFTs on", "CC")
+  .description("List all SPL Tokens in a wallet")
+  .option("--nfts-only <nftsOnly>", "Flag to list only NFTs")
+  .option("-s, --symbol <symbol>", "Symbol to filter NFTs on", "CC")
   .option(
-    "-r, --rpc-url <string>",
+    "-r, --rpc-url <rpcUrl>",
     "custom rpc url since this is a heavy command"
   )
   .action(async (options, cmd) => {
-    const { keypair, env, symbol, rpcUrl: rpcUrlArg } = cmd.opts();
+    const { keypair, env, symbol, rpcUrl: rpcUrlArg, nftsOnly } = options;
 
     // Load wallet keypair
     const payer = Keypair.fromSecretKey(
@@ -75,9 +76,6 @@ programCommand("list")
     });
     const tokenAccounts = await Promise.all(
       resp.value.map(async ({ account, pubkey }, index) => {
-        // Avoid RPC rate limites
-        await wait(index * 2_500);
-
         const decoded = AccountLayout.decode(account.data);
         const tokenAccount = {
           address: pubkey,
@@ -90,47 +88,60 @@ programCommand("list")
           delegatedAmount: new u64(decoded.delegatedAmount),
           closeAuthority: new PublicKey(decoded.closeAuthority),
         };
-        // Look up Metadata account with memcmp filter based on the token mint
-        console.log(`Looking up program accounts for index: ${index}`);
-        const res = await connection.getProgramAccounts(METADATA_PROGRAM_ID, {
-          filters: [
-            {
-              memcmp: {
-                offset:
-                  1 + // key
-                  32, // update auth
-                // 32 + // mint
-                bytes: tokenAccount.mint.toBase58(),
-              },
-            },
-          ],
-        });
-        // If there is a Metadata account, load and deserialize the data
-        const metadataAccount = res[0];
         let metaData = undefined;
-        if (metadataAccount) {
-          metaData = await programs.metadata.Metadata.load(
-            connection,
-            metadataAccount.pubkey
-          );
+        if (nftsOnly) {
+          // Avoid RPC rate limites
+          await wait(index * 2_500);
+          // Look up Metadata account with memcmp filter based on the token mint
+          console.log(`Looking up metadat program accounts for index: ${index}`);
+          const res = await connection.getProgramAccounts(METADATA_PROGRAM_ID, {
+            filters: [
+              {
+                memcmp: {
+                  offset:
+                    1 + // key
+                    32, // update auth
+                  // 32 + // mint
+                  bytes: tokenAccount.mint.toBase58(),
+                },
+              },
+            ],
+          });
+          // If there is a Metadata account, load and deserialize the data
+          const metadataAccount = res[0];
+          if (metadataAccount) {
+            metaData = await programs.metadata.Metadata.load(
+              connection,
+              metadataAccount.pubkey
+            );
+          }
         }
         return { tokenAccount, metaData };
       })
     );
 
-    console.log("Filtering token accounts for metadata (i.e. only NFTs)");
-    let nftAccounts = tokenAccounts.filter(
-      (x) => x.metaData && x.metaData.data
-    );
-    if (symbol) {
-      console.log(`Filtering accounts by metadta symbol: ${symbol}`);
-      // Filter all owned NFTs by symbol
-      nftAccounts = tokenAccounts.filter(
-        (x) => x.metaData && x.metaData.data.data.symbol === symbol
+    if (nftsOnly) {
+      console.log("Filtering token accounts for metadata (i.e. only NFTs)");
+      let nftAccounts = tokenAccounts.filter(
+        (x) => x.metaData && x.metaData.data
       );
+      if (symbol) {
+        console.log(`Filtering accounts by metadta symbol: ${symbol}`);
+        // Filter all owned NFTs by symbol
+        nftAccounts = tokenAccounts.filter(
+          (x) => x.metaData && x.metaData.data.data.symbol === symbol
+        );
+      }
+      console.log("NFT mint addresses\n");
+      nftAccounts.forEach((account) =>
+        console.log(account.tokenAccount.mint.toString())
+      );
+    } else {
+      console.log("All token mint addresses\n");
+      tokenAccounts.forEach((account) => {
+        console.log(account.tokenAccount.mint.toString())
+      })
     }
-    console.log('NFT mint addresses\n')
-    nftAccounts.forEach((account) => console.log(account.tokenAccount.mint.toString()))
   });
 
 programCommand("transfer")
