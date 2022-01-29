@@ -175,7 +175,7 @@ const filterTokenAccounts = async (
       );
     }
   }
-  // filteredAccounts = filteredAccounts.filter((x) => !dolphinMasterEditions.includes(x.tokenAccount.address.toString()) && !dolphinMasterEditions.includes(x.tokenAccount.mint.toString()))
+  filteredAccounts = filteredAccounts.filter((x) => !dolphinMasterEditions.includes(x.tokenAccount.address.toString()) && !dolphinMasterEditions.includes(x.tokenAccount.mint.toString()))
   return filteredAccounts;
 };
 
