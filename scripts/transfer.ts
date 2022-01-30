@@ -20,7 +20,7 @@ import { programs } from "@metaplex/js";
 import {
   MasterEdition,
 } from "@metaplex-foundation/mpl-token-metadata";
-import BN from "bn.js";
+import athleteMints1 from "./athletes_mints_1.json"
 
 const METADATA_PROGRAM_ID = new PublicKey(
   "metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s"
@@ -176,6 +176,7 @@ const filterTokenAccounts = async (
     }
   }
   filteredAccounts = filteredAccounts.filter((x) => !dolphinMasterEditions.includes(x.tokenAccount.address.toString()) && !dolphinMasterEditions.includes(x.tokenAccount.mint.toString()))
+  filteredAccounts = filteredAccounts.filter((x) => athleteMints1.includes(x.tokenAccount.mint.toString()))
   return filteredAccounts;
 };
 
